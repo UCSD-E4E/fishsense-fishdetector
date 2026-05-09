@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Install / sync deps: `uv sync`
 - Run a notebook kernel against the project env: `uv run jupyter lab` (or use the `.venv` produced by `uv sync` as the kernel in VS Code).
 - There is no test suite, lint config, or build step — this is a Jupyter-driven training project.
-- Optional: a [flake.nix](flake.nix) provides a reproducible dev shell with Python 3.13, uv, the Rust toolchain (needed for the fishsense-core build), and the system libs that the pip wheels dlopen. `nix develop` to enter; the shellHook prints first-time setup hints. The flake also surfaces the system NVIDIA userspace driver libs on `LD_LIBRARY_PATH` so CUDA wheels can see the GPU.
+- Optional: a [flake.nix](flake.nix) provides a reproducible dev shell with Python 3.13, uv, the Rust toolchain (needed for the fishsense-core build), and the system libs that the pip wheels dlopen. `nix develop` to enter; the shellHook prints first-time setup hints.
+- **Inside the nix shell, run CUDA workloads via the `with-cuda` wrapper** (defined in `flake.nix`'s shellHook): e.g. `with-cuda uv run jupyter lab`. The wrapper prepends `/usr/lib/x86_64-linux-gnu` (system NVIDIA driver dir) to `LD_LIBRARY_PATH` for one command at a time. Putting that path on the global `LD_LIBRARY_PATH` would shadow nix's newer glibc and break system tools like `rm`, so it's scoped per-command. NixOS users don't need the wrapper — their NVIDIA libs live at `/run/opengl-driver/lib`, which the shellHook exposes globally without conflicts.
 
 ### Building fishsense-core with CUDA
 

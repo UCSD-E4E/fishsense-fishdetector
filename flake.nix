@@ -11,16 +11,14 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          # The wheels themselves are unfree (CUDA), but they're managed by uv,
-          # not nixpkgs. allowUnfree is set defensively so anything pulled
-          # transitively from nixpkgs (e.g. cudaPackages helpers if you add
-          # them later) doesn't error out.
+          # The CUDA wheels are unfree; uv pulls them, not nixpkgs, but allowUnfree
+          # is set defensively in case anything pulls cudaPackages transitively.
           config.allowUnfree = true;
         };
 
         # System libraries that pip wheels (opencv-python, torch, ORT, scikit-image)
-        # dlopen at runtime. The CUDA stack itself ships with torch via the
-        # nvidia-* pip packages; the system NVIDIA driver is exposed below.
+        # dlopen at runtime. These are pure nix paths — safe to put on LD_LIBRARY_PATH
+        # globally because nix's glibc is forward-compatible with the wheels.
         wheelRuntimeLibs = with pkgs; [
           stdenv.cc.cc.lib   # libstdc++.so.6 — torch / ORT / nearly every C++ wheel
           zlib               # png decoders, model archives
@@ -52,19 +50,38 @@
           buildInputs = wheelRuntimeLibs;
 
           shellHook = ''
-            # Expose wheel-dlopened system libs.
+            # Expose nix-built wheel runtime libs globally — safe because they're
+            # forward-compatible with anything else in the shell.
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath wheelRuntimeLibs}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-            # Surface the system NVIDIA userspace driver libs (libcuda.so.1,
-            # libnvidia-ml.so). The CUDA EP in fishsense-core and torch both
-            # need these to talk to the kernel driver. On NixOS they live at
-            # /run/opengl-driver/lib; on Ubuntu/Debian/Fedora they're under
-            # /usr/lib/x86_64-linux-gnu (or /usr/lib64 on Fedora).
-            for nvdir in /run/opengl-driver/lib /usr/lib/x86_64-linux-gnu /usr/lib64; do
-              if [ -d "$nvdir" ]; then
-                export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$nvdir"
-              fi
-            done
+            # NixOS surfaces the system NVIDIA userspace driver at a path that
+            # *doesn't* shadow nix's glibc, so it's safe to add globally.
+            if [ -d /run/opengl-driver/lib ]; then
+              export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/run/opengl-driver/lib"
+            fi
+
+            # On non-NixOS Linux (Ubuntu / Debian / Fedora) the NVIDIA driver
+            # lives in /usr/lib/x86_64-linux-gnu, which ALSO holds the system
+            # glibc — putting that on LD_LIBRARY_PATH globally would break every
+            # nix-built binary that needs nix's newer glibc (e.g. coreutils' rm).
+            #
+            # Instead we provide a `with-cuda` shell function that prepends the
+            # NVIDIA dir for one command at a time. Use it whenever you need
+            # CUDA-resolved libs:
+            #
+            #   with-cuda uv run jupyter lab
+            #   with-cuda .venv/bin/python my_script.py
+            #
+            # uv sync itself does NOT need CUDA visibility — only runtime does.
+            with-cuda() {
+              local extra_path=""
+              for d in /usr/lib/x86_64-linux-gnu /usr/lib64 /run/opengl-driver/lib; do
+                if [ -d "$d" ]; then
+                  extra_path="$extra_path:$d"
+                fi
+              done
+              LD_LIBRARY_PATH="''${LD_LIBRARY_PATH}$extra_path" "$@"
+            }
 
             if [ ! -d .venv ]; then
               cat <<'HINT'
@@ -73,6 +90,11 @@
 
               MATURIN_PEP517_ARGS='--features cuda' \
                 uv sync --config-setting 'build-args=--features cuda'
+
+            Run anything that needs CUDA libs at runtime via the `with-cuda` wrapper:
+
+              with-cuda uv run jupyter lab
+              with-cuda .venv/bin/python -c "import torch; print(torch.cuda.is_available())"
 
             SAM 3.1 weights (gated, ~3.3 GB; only needed for the eval notebook):
 
