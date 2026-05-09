@@ -58,6 +58,13 @@
             openssl
             openssl.dev
 
+            # System OpenBLAS for ndarray-linalg's `openblas-system` feature.
+            # Without this, the build falls through to openblas-src's bundled
+            # build path (compiles OpenBLAS from source, slow) and pulls in
+            # openblas-build 0.10.16 — which has a broken `compile_error!` if
+            # neither rustls nor native-tls features are enabled.
+            openblas
+
             # Convenience CLI for fetching gated SAM 3.1 weights without going
             # through uv (handy if you want to grab them before `uv sync`).
             python313Packages.huggingface-hub
@@ -107,10 +114,13 @@
             if [ ! -d .venv ]; then
               cat <<'HINT'
 
-            First-time setup (build fishsense-core with CUDA):
+            First-time setup (build fishsense-core with CUDA, lockfile-pinned):
 
-              MATURIN_PEP517_ARGS='--features cuda' \
-                uv sync --config-setting 'build-args=--features cuda'
+              MATURIN_PEP517_ARGS='--features cuda --locked' \
+                uv sync --config-setting 'build-args=--features cuda --locked'
+
+            (`--locked` is important — without it cargo re-resolves and picks
+            openblas-build 0.10.16, which has a broken compile_error.)
 
             Run anything that needs CUDA libs at runtime via the `with-cuda` wrapper:
 
