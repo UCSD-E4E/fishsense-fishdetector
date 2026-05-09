@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Install / sync deps: `uv sync`
 - Run a notebook kernel against the project env: `uv run jupyter lab` (or use the `.venv` produced by `uv sync` as the kernel in VS Code).
 - There is no test suite, lint config, or build step — this is a Jupyter-driven training project.
+- Optional: a [flake.nix](flake.nix) provides a reproducible dev shell with Python 3.13, uv, the Rust toolchain (needed for the fishsense-core build), and the system libs that the pip wheels dlopen. `nix develop` to enter; the shellHook prints first-time setup hints. The flake also surfaces the system NVIDIA userspace driver libs on `LD_LIBRARY_PATH` so CUDA wheels can see the GPU.
 
 ### Building fishsense-core with CUDA
 
