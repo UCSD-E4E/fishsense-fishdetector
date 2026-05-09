@@ -52,6 +52,12 @@
             # OpenCV system libraries that the `opencv` Rust crate links against.
             opencv4
 
+            # OpenSSL dev libs + pkg-config files. fishsense-core's build.rs uses
+            # reqwest (with default native-tls) to download ORT binaries, which
+            # transitively requires openssl-sys at compile time.
+            openssl
+            openssl.dev
+
             # Convenience CLI for fetching gated SAM 3.1 weights without going
             # through uv (handy if you want to grab them before `uv sync`).
             python313Packages.huggingface-hub
