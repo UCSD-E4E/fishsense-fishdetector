@@ -17,8 +17,8 @@
         };
 
         # System libraries that pip wheels (opencv-python, torch, ORT, scikit-image)
-        # dlopen at runtime. These are pure nix paths — safe to put on LD_LIBRARY_PATH
-        # globally because nix's glibc is forward-compatible with the wheels.
+        # dlopen at runtime. Pure nix paths — safe to put on LD_LIBRARY_PATH globally
+        # because nix's glibc is forward-compatible with the wheels.
         wheelRuntimeLibs = with pkgs; [
           stdenv.cc.cc.lib   # libstdc++.so.6 — torch / ORT / nearly every C++ wheel
           zlib               # png decoders, model archives
@@ -42,6 +42,16 @@
             cargo
             pkg-config
 
+            # The Rust `opencv` crate (a fishsense-core dep) uses bindgen via
+            # clang-sys to generate Rust bindings from OpenCV headers — needs
+            # libclang at build time.
+            llvmPackages.libclang.lib
+            clang
+            cmake
+
+            # OpenCV system libraries that the `opencv` Rust crate links against.
+            opencv4
+
             # Convenience CLI for fetching gated SAM 3.1 weights without going
             # through uv (handy if you want to grab them before `uv sync`).
             python313Packages.huggingface-hub
@@ -53,6 +63,11 @@
             # Expose nix-built wheel runtime libs globally — safe because they're
             # forward-compatible with anything else in the shell.
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath wheelRuntimeLibs}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+            # Tell clang-sys / bindgen where libclang.so lives so the opencv
+            # Rust crate can generate its FFI bindings during fishsense-core's
+            # cargo build.
+            export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
 
             # NixOS surfaces the system NVIDIA userspace driver at a path that
             # *doesn't* shadow nix's glibc, so it's safe to add globally.
