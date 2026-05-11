@@ -25,6 +25,7 @@ dependencies = [
     "regex>=2024.0.0",
     "tabulate>=0.9",
     "setuptools<80",  # sam3 imports pkg_resources, removed in setuptools >= 80
+    "onnxruntime-gpu==1.24.*",
 ]
 
 [tool.uv.sources]
