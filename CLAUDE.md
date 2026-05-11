@@ -13,18 +13,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Building fishsense-core with CUDA
 
-`fishsense-core` is a maturin-built Rust extension pinned to tag `fishsense_core-v2.1.0` in [pyproject.toml](pyproject.toml). The CUDA execution provider is gated behind the Cargo feature `cuda` and is OFF by default. To build with CUDA acceleration:
+`fishsense-core` is a maturin-built Rust extension pinned to tag `fishsense_core-v2.1.3` in [pyproject.toml](pyproject.toml). The CUDA execution provider is gated behind the Cargo feature `cuda` and is OFF by default. To build with CUDA acceleration:
 
 ```bash
-MATURIN_PEP517_ARGS='--features cuda --locked' \
-  uv sync --reinstall-package fishsense-core --config-setting 'build-args=--features cuda --locked'
+MATURIN_PEP517_ARGS='--features cuda' \
+  uv sync --reinstall-package fishsense-core --config-setting 'build-args=--features cuda'
 ```
 
-This downloads CUDA-enabled ORT binaries (~250MB) and bundles `libonnxruntime_providers_cuda.so` and friends into the wheel under `fishsense_core/`. Without `--config-setting`, the package builds CPU-only.
+Without `--config-setting`, the package builds CPU-only.
 
-**`--locked` is required**: without it cargo re-resolves transitive deps and picks `openblas-build = 0.10.16`, which has a broken `compile_error!` macro that fires when neither `rustls` nor `native-tls` is enabled. The lockfile-pinned version (`0.10.15`) doesn't have that bug. Building also needs system OpenBLAS available via pkg-config — the flake.nix dev shell provides it; outside nix you need `libopenblas-dev` (Debian/Ubuntu) or equivalent.
+What v2.1.x fixed (so we no longer need workarounds for these):
+- **v2.1.1** — preloads the `nvidia-*` CUDA libs itself and exposes the active execution provider; also added the `openblas-src { features = ["rustls"] }` workaround to its own Cargo.toml so the build no longer needs `--locked` to dodge `openblas-build` 0.10.16's broken `compile_error!`.
+- **v2.1.2 / v2.1.3** — the CUDA wheel builds against `onnxruntime-gpu` and stubs the glibc-2.38 `__isoc23_strtol` exports, so it loads on hosts with glibc < 2.38 (e.g. older Ubuntu LTS).
 
-At runtime the CUDA libs are dynamically loaded via the `nvidia-*` pip packages that come in transitively through torch/ultralytics. **`torch` must be imported before `fishsense_core`** so it preloads `libcudart`/`libcublas`/`libcudnn` with `RTLD_GLOBAL`; otherwise ORT silently falls back to CPU. The notebook loader handles this — see [deepfish_yolo_segmentation_eval.ipynb](deepfish_yolo_segmentation_eval.ipynb) cell `cuda-probe`, which reports inference latency so you can tell at a glance whether CUDA is active (~50–500ms/image vs ~4–5s/image on CPU at 1080p).
+Building still needs system OpenBLAS via pkg-config (`ndarray-linalg`'s `openblas-system` feature) plus libclang + OpenCV + OpenSSL for the Rust deps — the [flake.nix](flake.nix) dev shell provides all of these; outside nix you need `libopenblas-dev`, `libclang-dev`, `libopencv-dev`, `libssl-dev` (Debian/Ubuntu) or equivalent.
+
+At runtime, even though v2.1.1+ preloads the CUDA libs, **importing `torch` before `fishsense_core` is still the most reliable path** (torch's package init does the `RTLD_GLOBAL` preload of `libcudart`/`libcublas`/`libcudnn`). The notebook loader does this. See [deepfish_yolo_segmentation_eval.ipynb](deepfish_yolo_segmentation_eval.ipynb) cell `cuda-probe`, which reports inference latency so you can tell at a glance whether CUDA is active (~50–500ms/image vs ~4–5s/image on CPU at 1080p).
 
 ### SAM 3 setup (for both Group A and Group B in the eval notebook)
 

@@ -114,13 +114,13 @@
             if [ ! -d .venv ]; then
               cat <<'HINT'
 
-            First-time setup (build fishsense-core with CUDA, lockfile-pinned):
+            First-time setup (build fishsense-core v2.1.3 with CUDA):
 
-              MATURIN_PEP517_ARGS='--features cuda --locked' \
-                uv sync --config-setting 'build-args=--features cuda --locked'
+              MATURIN_PEP517_ARGS='--features cuda' \
+                uv sync --config-setting 'build-args=--features cuda'
 
-            (`--locked` is important — without it cargo re-resolves and picks
-            openblas-build 0.10.16, which has a broken compile_error.)
+            (v2.1.1+ ships the openblas-src rustls workaround in its own
+            Cargo.toml, so --locked is no longer needed.)
 
             Run anything that needs CUDA libs at runtime via the `with-cuda` wrapper:
 
